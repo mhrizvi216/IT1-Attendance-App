@@ -45,31 +45,152 @@ export async function getTodayLogs(employeeId: string): Promise<AttendanceLog[]>
   return data || []
 }
 
+export async function getLastLog(employeeId: string): Promise<AttendanceLog | null> {
+  const { data, error } = await supabase
+    .from('attendance_logs')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error fetching last log:', error)
+    return null
+  }
+  return data
+}
+
 export async function getCurrentStatus(employeeId: string): Promise<{
   isWorking: boolean
   isOnBreak: boolean
   lastAction: ActionType | null
   startWorkTime: string | null
 }> {
-  const logs = await getTodayLogs(employeeId)
+  // Logic updated for Night Shift:
+  // Instead of just checking today's logs, we look at the very last action recorded.
+  // If the last action was 'start_work', they are working, even if it was yesterday (e.g. 8 PM).
 
-  if (logs.length === 0) {
+  const lastLog = await getLastLog(employeeId)
+
+  if (!lastLog) {
     return { isWorking: false, isOnBreak: false, lastAction: null, startWorkTime: null }
   }
 
-  const lastLog = logs[logs.length - 1]
   const isWorking = lastLog.action_type === 'start_work' || lastLog.action_type === 'end_break'
   const isOnBreak = lastLog.action_type === 'start_break'
 
-  // Find the most recent start_work timestamp
-  const startWorkLog = logs.filter(log => log.action_type === 'start_work').pop()
-  const startWorkTime = startWorkLog?.timestamp || null
+  // To find start time, we need to look backwards from the last log until we find the start_work
+  // This might be expensive if we scan too far, but typically it's within 24h.
+  // For UI display, we'll try to find the start_work associated with this session.
+  let startWorkTime = null
+  if (isWorking || isOnBreak) {
+    // Determine the relevant start_work. 
+    // If we are working, the session started recently.
+    // Query logs from last 24 hours to find the 'start_work'
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentLogs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .gte('timestamp', yesterday)
+      .order('timestamp', { ascending: false })
+
+    // Find the first 'start_work' when looking backwards
+    const startLog = recentLogs?.find(l => l.action_type === 'start_work')
+    startWorkTime = startLog?.timestamp || lastLog.timestamp // Fallback to last log if not found
+  }
 
   return {
     isWorking,
     isOnBreak,
     lastAction: lastLog.action_type,
     startWorkTime,
+  }
+}
+
+async function calculateAndSaveShiftSummary(employeeId: string, currentLog: AttendanceLog) {
+  // This function is called after 'end_work' to calculate hours and save to daily_summary.
+  // Pivot date is the date of the START_WORK log, not necessarily today.
+
+  // 1. Find the start_work for this shift
+  const { data: logs } = await supabase
+    .from('attendance_logs')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .lte('timestamp', currentLog.timestamp)
+    .order('timestamp', { ascending: false })
+    .limit(20) // Assume shift isn't longer than 20 actions
+
+  if (!logs) return
+
+  // Scan backwards
+  let startWorkLog: AttendanceLog | null = null
+  const shiftLogs: AttendanceLog[] = []
+
+  for (const log of logs) {
+    shiftLogs.unshift(log) // Add to start to maintain chronological order later
+    if (log.action_type === 'start_work') {
+      startWorkLog = log
+      break
+    }
+    // Safety break: if we hit a previous end_work, we missed the start or data is corrupt
+    if (log.action_type === 'end_work' && log.id !== currentLog.id) {
+      break
+    }
+  }
+
+  if (!startWorkLog) {
+    console.error('Could not find start_work for summary calculation')
+    return
+  }
+
+  // Calculate minutes
+  let totalWorkMinutes = 0
+  let totalBreakMinutes = 0
+
+  const startTime = new Date(startWorkLog.timestamp)
+  const endTime = new Date(currentLog.timestamp)
+
+  // Simple calculation: Total Duration - Break Durations
+  const totalDurationMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60)
+
+  // Calculate breaks
+  let breakStart: number | null = null
+  for (const log of shiftLogs) {
+    if (log.action_type === 'start_break') {
+      breakStart = new Date(log.timestamp).getTime()
+    } else if (log.action_type === 'end_break' && breakStart) {
+      totalBreakMinutes += (new Date(log.timestamp).getTime() - breakStart) / (1000 * 60)
+      breakStart = null
+    }
+  }
+
+  totalWorkMinutes = Math.max(0, Math.round(totalDurationMinutes - totalBreakMinutes))
+  totalBreakMinutes = Math.round(totalBreakMinutes)
+
+  // Status checks
+  // Late check: 3 PM is 15:00.
+  const isLate = false // Disable hardcoded late check for now due to complexity
+
+  const pivotDate = startWorkLog.timestamp.split('T')[0] // 'YYYY-MM-DD' of the start day
+
+  // Upsert
+  const { error } = await supabase
+    .from('daily_summary')
+    .upsert({
+      employee_id: employeeId,
+      date: pivotDate,
+      total_work_minutes: totalWorkMinutes,
+      total_break_minutes: totalBreakMinutes,
+      is_late: isLate,
+      under_hours: totalWorkMinutes < 480,
+      status_color: totalWorkMinutes < 480 ? 'red' : 'green',
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'employee_id,date' })
+
+  if (error) {
+    console.error('Error updating daily summary:', error)
   }
 }
 
@@ -89,11 +210,11 @@ export async function logAction(employeeId: string, actionType: ActionType): Pro
   }
 
   // Restriction: 3 PM (15:00) onwards
-  // TEST MODE: Set to 0 to allow testing. Revert to 15 for production.
-  const START_HOUR = 0 // Was 15
+  const START_HOUR = 15 // Reverted to 15 (3 PM)
   if (actionType === 'start_work' && hours < START_HOUR) {
     throw new Error(`Work can only start after ${START_HOUR}:00`)
   }
+
   if (actionType === 'start_break' && !status.isWorking) {
     throw new Error('Cannot start break before starting work')
   }
@@ -104,7 +225,7 @@ export async function logAction(employeeId: string, actionType: ActionType): Pro
     throw new Error('Cannot end work while break is active')
   }
   if (actionType === 'start_work' && status.isWorking) {
-    throw new Error('Work already started today')
+    throw new Error('Work already started. Current session active.')
   }
   if (actionType === 'end_work' && !status.isWorking) {
     throw new Error('Cannot end work if work has not started')
@@ -134,8 +255,11 @@ export async function logAction(employeeId: string, actionType: ActionType): Pro
     throw error
   }
 
-  // Daily summary is automatically calculated by database trigger
-  // No need to manually call the function
+  // Daily summary calculation in Application Logic (Night Shift Support)
+  // We trigger this only on 'end_work'. 
+  if (actionType === 'end_work' && data) {
+    await calculateAndSaveShiftSummary(employeeId, data)
+  }
 
   return data
 }
@@ -189,4 +313,3 @@ export async function getAllEmployeesSummaries(startDate: string, endDate: strin
   if (error) throw error
   return data || []
 }
-
