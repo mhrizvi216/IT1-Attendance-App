@@ -12,7 +12,7 @@ export interface Employee {
 export async function getCurrentUser() {
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       // Silently return null if not authenticated - don't log errors for unauthenticated users
       return null
@@ -36,11 +36,11 @@ export async function getCurrentUser() {
     // If employee record doesn't exist, try to create it from auth user metadata
     if (!employee && user) {
       console.log('Employee record not found, attempting to create from auth metadata')
-      
+
       const userMetadata = user.user_metadata || {}
       const name = userMetadata.name || user.email?.split('@')[0] || 'User'
       const role = (userMetadata.role as UserRole) || 'employee'
-      
+
       // Try to create the employee record
       const { error: createError } = await supabase
         .from('employees')
@@ -93,7 +93,7 @@ export async function signUp(email: string, password: string, name: string, role
     console.error('Auth error:', authError)
     throw authError
   }
-  
+
   if (!authData.user) {
     throw new Error('Failed to create user. Please check if email confirmation is required in Supabase settings.')
   }
@@ -115,15 +115,13 @@ export async function signUp(email: string, password: string, name: string, role
   // If insert fails due to RLS or other policy issues, check for trigger
   if (employeeError) {
     // Check if it's a 401/403 policy error (expected if RLS policy is missing)
-    const isPolicyError = 
-      employeeError.code === '42501' || 
+    const isPolicyError =
+      employeeError.code === '42501' ||
       employeeError.code === 'PGRST301' ||
-      employeeError.status === 401 ||
-      employeeError.status === 403 ||
       employeeError.message.includes('policy') ||
       employeeError.message.includes('permission denied') ||
       employeeError.message.includes('new row violates row-level security')
-    
+
     if (isPolicyError) {
       // Check if employee record was created by trigger (with a small retry)
       let retries = 3
@@ -175,14 +173,14 @@ export async function signUp(email: string, password: string, name: string, role
         .from('employees')
         .update({ name, email, role })
         .eq('id', authData.user.id)
-      
+
       if (updateError) {
         throw new Error('Failed to update employee record. Please contact support.')
       }
     } else {
       // Other error (not a policy error)
       // Only log non-policy errors
-      if (employeeError.code !== 'PGRST301' && employeeError.status !== 401 && employeeError.status !== 403) {
+      if (employeeError.code !== 'PGRST301') {
         console.error('Employee insert error:', employeeError)
       }
       throw new Error(
@@ -202,7 +200,7 @@ export async function signIn(email: string, password: string) {
 
   if (error) {
     console.error('Sign in error:', error)
-    
+
     // Provide helpful error messages
     if (error.message.includes('Invalid login credentials')) {
       throw new Error('Invalid email or password. Please check your credentials.')
@@ -213,7 +211,7 @@ export async function signIn(email: string, password: string) {
     if (error.message.includes('User not found')) {
       throw new Error('No account found with this email. Please sign up first.')
     }
-    
+
     throw error
   }
 

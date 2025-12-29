@@ -45,24 +45,6 @@ export default function AdminPage() {
     return () => clearTimeout(timer)
   }, [startDate, endDate])
 
-  useEffect(() => {
-    if (user) {
-      if (user.role !== 'admin') {
-        router.push('/dashboard')
-        return
-      }
-      loadEmployees()
-    } else if (!userLoading) {
-      router.push('/login')
-    }
-  }, [user, userLoading, router, loadEmployees])
-
-  useEffect(() => {
-    if (user && user.role === 'admin') {
-      loadSummaries()
-    }
-  }, [user, debouncedStartDate, debouncedEndDate, loadSummaries])
-
   const loadEmployees = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -88,6 +70,24 @@ export default function AdminPage() {
       setLoading(false)
     }
   }, [debouncedStartDate, debouncedEndDate])
+
+  useEffect(() => {
+    if (user) {
+      if (user.role !== 'admin') {
+        router.push('/dashboard')
+        return
+      }
+      loadEmployees()
+    } else if (!userLoading) {
+      router.push('/login')
+    }
+  }, [user, userLoading, router, loadEmployees])
+
+  useEffect(() => {
+    if (user && user.role === 'admin') {
+      loadSummaries()
+    }
+  }, [user, debouncedStartDate, debouncedEndDate, loadSummaries])
 
   const formatTime = useCallback((minutes: number): string => {
     const hours = Math.floor(minutes / 60)
@@ -303,13 +303,12 @@ export default function AdminPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2">
                           <div
-                            className={`w-4 h-4 rounded-full ${
-                              summary.status_color === 'green'
+                            className={`w-4 h-4 rounded-full ${summary.status_color === 'green'
                                 ? 'bg-green-500'
                                 : summary.status_color === 'yellow'
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
+                                  ? 'bg-yellow-500'
+                                  : 'bg-red-500'
+                              }`}
                           ></div>
                           <span className="text-sm text-gray-900 capitalize font-medium">{summary.status_color}</span>
                           {summary.is_late && <span className="text-xs text-yellow-700 font-medium">Late</span>}
