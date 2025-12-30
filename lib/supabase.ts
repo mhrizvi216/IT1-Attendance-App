@@ -3,18 +3,21 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Fallback to empty strings to prevent build crashes, but warn the user.
+// This allows the static build to proceed (Next.js prerendering) even if env vars are missing.
+// The app will fail at runtime if not configured, which is expected.
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables!\n\n' +
-    'Please create a .env.local file with:\n' +
-    'NEXT_PUBLIC_SUPABASE_URL=your_supabase_url\n' +
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key\n\n' +
-    'Get these from: Supabase Dashboard → Settings → API'
+  console.warn(
+    'WARNING: Missing Supabase environment variables! \n' +
+    'The app will not function correctly. \n' +
+    'Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
   )
 }
+const url = supabaseUrl || 'https://placeholder.supabase.co'
+const key = supabaseAnonKey || 'placeholder-key'
 
 // Singleton pattern for Supabase client
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(url, key, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
