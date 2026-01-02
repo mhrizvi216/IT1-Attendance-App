@@ -300,12 +300,14 @@ export async function getAllEmployeesSummaries(startDate: string, endDate: strin
     .from('daily_summary')
     .select(`
       *,
-      employees (
+      employees!inner (
         id,
         name,
-        email
+        email,
+        role
       )
     `)
+    .neq('employees.role', 'admin')
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date', { ascending: false })

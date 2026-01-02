@@ -13,9 +13,9 @@ export default function DashboardPage() {
   const { user, loading: userLoading } = useUser()
   const [logs, setLogs] = useState<AttendanceLog[]>([])
   const [summary, setSummary] = useState<DailySummary | null>(null)
-  const [status, setStatus] = useState({ 
-    isWorking: false, 
-    isOnBreak: false, 
+  const [status, setStatus] = useState({
+    isWorking: false,
+    isOnBreak: false,
     lastAction: null as string | null,
     startWorkTime: null as string | null
   })
@@ -50,6 +50,14 @@ export default function DashboardPage() {
     }
   }, [user, userLoading, router])
 
+  // Auth check - redirect if not logged in
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.push('/login')
+    }
+  }, [user, userLoading, router])
+
+  // Data loading
   useEffect(() => {
     if (user) {
       loadData()
@@ -84,12 +92,12 @@ export default function DashboardPage() {
   const isStartWorkLocked = useMemo(() => {
     if (status.isOnBreak) return true // Locked when on break
     if (!status.startWorkTime) return false // Not locked if never started
-    
+
     const startTime = new Date(status.startWorkTime).getTime()
     const currentTime = new Date().getTime()
     const threeHoursInMs = 3 * 60 * 60 * 1000
     const timeElapsed = currentTime - startTime
-    
+
     // Locked if less than 3 hours have passed since start_work
     return timeElapsed < threeHoursInMs
   }, [status.isOnBreak, status.startWorkTime])
@@ -252,12 +260,11 @@ export default function DashboardPage() {
               {logs.map((log) => (
                 <div key={log.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-3 h-3 rounded-full ${
-                      log.action_type === 'start_work' ? 'bg-green-500' :
+                    <div className={`w-3 h-3 rounded-full ${log.action_type === 'start_work' ? 'bg-green-500' :
                       log.action_type === 'end_work' ? 'bg-red-500' :
-                      log.action_type === 'start_break' ? 'bg-yellow-500' :
-                      'bg-blue-500'
-                    }`}></div>
+                        log.action_type === 'start_break' ? 'bg-yellow-500' :
+                          'bg-blue-500'
+                      }`}></div>
                     <Clock className="w-5 h-5 text-gray-400" />
                     <span className="font-medium text-gray-900 capitalize">
                       {log.action_type.replace('_', ' ')}

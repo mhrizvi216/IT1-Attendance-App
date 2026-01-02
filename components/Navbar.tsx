@@ -55,15 +55,6 @@ function Navbar() {
                     >
                       Manage Attendance
                     </Link>
-                    <Link
-                      href="/admin"
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${pathname === '/admin' // Note: Both verify same path? Keeping as requested
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'text-gray-700 hover:text-purple-600 hover:bg-gray-50'
-                        }`}
-                    >
-                      Student's List
-                    </Link>
                   </>
                 )}
                 {user.role !== 'admin' && (

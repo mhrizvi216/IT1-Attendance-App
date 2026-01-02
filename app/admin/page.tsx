@@ -33,7 +33,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null)
   const [debouncedStartDate, setDebouncedStartDate] = useState(startDate)
+
   const [debouncedEndDate, setDebouncedEndDate] = useState(endDate)
+  const [activeTab, setActiveTab] = useState<'attendance' | 'employees'>('attendance')
 
   // Debounce date changes
   useEffect(() => {
@@ -50,6 +52,7 @@ export default function AdminPage() {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
+        .neq('role', 'admin') // Exclude admins
         .order('name')
 
       if (error) throw error
@@ -145,7 +148,29 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-8">Admin Dashboard</h1>
 
-        {/* Filters */}
+        {/* Tab Navigation */}
+        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-8 inline-flex">
+          <button
+            onClick={() => setActiveTab('attendance')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'attendance'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+              }`}
+          >
+            Manage Attendance
+          </button>
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'employees'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+              }`}
+          >
+            Employees
+          </button>
+        </div>
+
+        {/* Filters - Visible in both tabs as they affect both views */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Filters</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -185,97 +210,28 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Employee Statistics */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Employee Statistics</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Employee
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Days Worked
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Total Hours
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Total Breaks
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Late Days
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {employees.map((employee) => {
-                  const stats = getEmployeeStats(employee.id)
-                  if (!stats) return null
-
-                  return (
-                    <tr key={employee.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                        <div className="text-sm text-gray-600">{employee.email}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {stats.daysWorked}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {stats.totalHours.toFixed(1)}h
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatTime(stats.totalBreaks)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600">
-                        {stats.lateCount}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                          <span className="text-sm text-gray-900">{stats.greenCount}</span>
-                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                          <span className="text-sm text-gray-900">{stats.yellowCount}</span>
-                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                          <span className="text-sm text-gray-900">{stats.redCount}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Daily Reports */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Daily Reports</h2>
-          {loading ? (
-            <div className="text-center py-8 text-gray-700">Loading...</div>
-          ) : filteredSummaries.length === 0 ? (
-            <div className="text-center py-8 text-gray-700">No data available for the selected period</div>
-          ) : (
+        {activeTab === 'employees' && (
+          /* Employees List (formerly Employee Statistics) */
+          <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Employees List</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Employee
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Work Hours
+                      Days Worked
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Break Time
+                      Total Hours
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Total Breaks
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Late Days
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Status
@@ -283,45 +239,118 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredSummaries.map((summary) => (
-                    <tr key={summary.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(summary.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {summary.employees?.name || 'Unknown'}
-                        </div>
-                        <div className="text-sm text-gray-600">{summary.employees?.email || ''}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatTime(summary.total_work_minutes)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatTime(summary.total_break_minutes)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <div
-                            className={`w-4 h-4 rounded-full ${summary.status_color === 'green'
+                  {employees.map((employee) => {
+                    const stats = getEmployeeStats(employee.id)
+                    if (!stats) return null
+
+                    return (
+                      <tr key={employee.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                          <div className="text-sm text-gray-600">{employee.email}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {stats.daysWorked}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {stats.totalHours.toFixed(1)}h
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatTime(stats.totalBreaks)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600">
+                          {stats.lateCount}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span className="text-sm text-gray-900">{stats.greenCount}</span>
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <span className="text-sm text-gray-900">{stats.yellowCount}</span>
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <span className="text-sm text-gray-900">{stats.redCount}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'attendance' && (
+          /* Daily Reports (Manage Attendance) */
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Attendance Records</h2>
+            {loading ? (
+              <div className="text-center py-8 text-gray-700">Loading...</div>
+            ) : filteredSummaries.length === 0 ? (
+              <div className="text-center py-8 text-gray-700">No data available for the selected period</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Employee
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Work Hours
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Break Time
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredSummaries.map((summary) => (
+                      <tr key={summary.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {new Date(summary.date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {summary.employees?.name || 'Unknown'}
+                          </div>
+                          <div className="text-sm text-gray-600">{summary.employees?.email || ''}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatTime(summary.total_work_minutes)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatTime(summary.total_break_minutes)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div
+                              className={`w-4 h-4 rounded-full ${summary.status_color === 'green'
                                 ? 'bg-green-500'
                                 : summary.status_color === 'yellow'
                                   ? 'bg-yellow-500'
                                   : 'bg-red-500'
-                              }`}
-                          ></div>
-                          <span className="text-sm text-gray-900 capitalize font-medium">{summary.status_color}</span>
-                          {summary.is_late && <span className="text-xs text-yellow-700 font-medium">Late</span>}
-                          {summary.under_hours && <span className="text-xs text-red-700 font-medium">Under</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                                }`}
+                            ></div>
+                            <span className="text-sm text-gray-900 capitalize font-medium">{summary.status_color}</span>
+                            {summary.is_late && <span className="text-xs text-yellow-700 font-medium">Late</span>}
+                            {summary.under_hours && <span className="text-xs text-red-700 font-medium">Under</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
